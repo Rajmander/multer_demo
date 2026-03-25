@@ -8,9 +8,13 @@ import { v4 as uuidv4 } from "uuid";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 
+import { dev } from "./otp.js";
+
 import PDFDocument from "pdfkit";
 
 import fs from "fs";
+
+dev();
 
 import { generatePdfBuffer } from "./gen.js";
 
