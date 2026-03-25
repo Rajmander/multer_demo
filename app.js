@@ -1,7 +1,22 @@
 import express from "express";
-import path from "path";
+import path, { resolve } from "path";
+
+import nodemailer from "nodemailer";
 
 import { v4 as uuidv4 } from "uuid";
+
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+import PDFDocument from "pdfkit";
+
+import fs from "fs";
+
+import { generatePdfBuffer } from "./gen.js";
+
+// Fix __dirname for ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 
@@ -247,6 +262,77 @@ app.post("/users/upload", (req, res) => {
       //data: req.file.filename,
     });
   });
+});
+// clbg kdet bpns njby
+
+app.post("/sendEmail", async (req, res, next) => {
+  const pdfBuffer = await generatePdfBuffer({
+    name: "John Doe",
+    email: "john@example.com",
+    date: "2026-03-25",
+    items: [
+      { description: "Product 1", amount: 29.99 },
+      { description: "Product 2", amount: 49.99 },
+    ],
+  });
+
+  // const filename = uuidv4() + ".pdf";
+  // const pdfPath = path.join(__dirname, filename);
+
+  // const doc = new PDFDocument();
+  // const stream = fs.createWriteStream(pdfPath);
+  // doc.pipe(stream);
+  // doc.fontSize(20).text("Hello! This is a test PDF.", 100, 100);
+  // doc.end();
+
+  // console.log("before promise resolved");
+
+  // await new Promise((resolve, reject) => {
+  //   stream.on("finish", resolve);
+  //   stream.on("error", reject);
+  // });
+
+  // console.log("After promise resolved");
+
+  // 1. Create transporter
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: "rajmandersinghmatharu@gmail.com",
+      pass: "",
+    },
+  });
+
+  // 2. Define email
+  const mailOptions = {
+    from: "rajmandersinghmatharu@gmail.com",
+    to: "rajmandersinghmatharu@gmail.com",
+    subject: "Test Email from Node.js",
+    html: ` <div style="font-family: Arial, sans-serif; line-height:1.6;">
+        <h2 style="color:#4CAF50;">Hello John Doe!</h2>
+        <p>Thank you for signing up on our platform. Your account has been successfully created.</p>
+        <h3>Account Details:</h3>
+        <ul>
+          <li><strong>Username:</strong> johndoe</li>
+          <li><strong>Email:</strong> john@example.com</li>
+        </ul>
+        <p style="color:#555;">If you didn’t sign up, please ignore this email.</p>
+        <hr>
+        <p style="font-size: 0.9em; color:#888;">&copy; 2026 My Company. All rights reserved.</p>
+      </div>`,
+    attachments: [
+      {
+        filename: uuidv4() + ".pdf",
+        //path: pdfPath,
+        content: pdfBuffer,
+        contentType: "application/pdf",
+      },
+    ],
+  };
+
+  // 3. Send email
+  let info = await transporter.sendMail(mailOptions);
+  console.log("Email sent: " + info.response);
 });
 
 app.listen(PORT, () => {
