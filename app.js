@@ -1,0 +1,263 @@
+import express from "express";
+import path from "path";
+
+import { v4 as uuidv4 } from "uuid";
+
+const app = express();
+
+app.use(express.json());
+
+import dotenv from "dotenv";
+dotenv.config();
+
+import multer from "multer";
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/");
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const filename = uuidv4() + ext;
+    cb(null, filename);
+  },
+});
+
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) {
+      return cb(new Error("Only images allowed"), false);
+    }
+    cb(null, true);
+  },
+  limits: { fileSize: 5 * 1024 * 1024, files: 6 },
+});
+
+// Import db connection
+import { dbConfig } from "./dbConfig.js";
+
+dbConfig();
+
+//import user from "./models/user_model.js";
+import user from "./models/user_model.js";
+
+//test();
+
+const PORT = process.env.PORT || 3000;
+
+// Find one
+app.get("/users/:name", async (req, res, next) => {
+  const name = req.params.name;
+  console.log("username ", name);
+
+  const userData = await user.findOne({ username: name });
+
+  if (!userData) {
+    return res.status(200).json({ msg: "User not found", data: [] });
+  }
+
+  res.status(200).json({ msg: "User fetched", data: userData });
+});
+
+// GET ALL USERS
+app.get("/users", async (req, res, next) => {
+  const totalUsers = await user.countDocuments();
+
+  console.log(req.headers);
+
+  //console.log(typeof req.query.offset);
+
+  return;
+
+  let offset = req.query.offset > 1 ? req.query.offset - 1 : 0;
+
+  let page = 1;
+  if (offset > 0) {
+    page = offset + 1;
+  }
+  let limit = req.query.limit ? req.query.limit : 2;
+
+  const MAX_LIMIT = 50;
+
+  if (limit > MAX_LIMIT) {
+    limit = MAX_LIMIT;
+  }
+
+  console.log("Offset = ", offset, "limit = ", limit);
+
+  // return;
+
+  const users = await user.find().skip(offset).limit(limit);
+  res.status(200).json({
+    msg: "Users listing",
+    data: users,
+    metaData: {
+      totalUsers,
+      page: page,
+      limit,
+    },
+  });
+});
+
+// CREATE USER
+app.post("/users", async (req, res) => {
+  try {
+    const { name, salary, city } = req.body;
+
+    const hasUser = await user.find({ username: name });
+    if (hasUser.length > 0) {
+      return res.status(209).json({ msg: "Username already exists" });
+    }
+
+    const userC = new user();
+    userC.username = name;
+    userC.salary = salary;
+    userC.city = city;
+    const userData = await userC.save();
+
+    return res.status(200).json({
+      status: "success",
+      msg: "Users saved successfully",
+      data: userData,
+    });
+  } catch (error) {
+    console.log("Error code = ", error.name);
+  }
+});
+
+// PARTIAL UPDATE
+app.patch("/users/:id", async (req, res, next) => {
+  const { name } = req.body;
+  const id = req.params.id;
+
+  const userData = await user.findByIdAndUpdate(
+    id,
+    { username: name },
+    { new: true },
+  );
+
+  res.status(200).json({ msg: "patch", data: userData });
+});
+
+// User BY Id
+app.get("/users/:id", async (req, res, next) => {
+  const userId = req.params.id;
+  const userData = await user.findById(userId, { _id: 0 });
+
+  if (!userData) {
+    return res.status(200).json({ msg: "User not found", data: [] });
+  }
+  return res
+    .status(200)
+    .json({ msg: "User fetched successfully", data: userData });
+});
+
+// Delete
+app.delete("/users/:id", async (req, res, next) => {
+  const userId = req.params.id;
+  const userDeleted = await user.findByIdAndDelete(userId);
+  if (!userDeleted) {
+    res.status(200).json({ msg: "Error while user deletion" });
+  }
+  res.status(200).json({ msg: "deleted" });
+});
+
+// Delete all users
+app.delete("/users", async (req, res, next) => {
+  const userDeleted = await user.deleteMany();
+  if (userDeleted) {
+    res.status(200).json({ msg: "All user deleted successfully" });
+  }
+  res.status(200).json({ msg: "Something went wrong" });
+});
+
+// Update status for all users
+app.patch("/users_all/users_update", async (req, res, next) => {
+  //return res.status(200).json({ msg: "Something went wrong" });
+
+  //const usersData = await user.find({ isAtive: null });
+
+  //console.log(usersData);
+
+  await user.updateMany({ amount: { $exists: null } }, { $set: { amount: 0 } });
+});
+
+app.get("/y_users", async (req, res, next) => {
+  const userData = await user.aggregate([
+    {
+      $match: { isAtive: true },
+    },
+    // {
+    //   $count: "totalUsers",
+    // },
+    {
+      $group: {
+        _id: "$city",
+        usersCount: { $sum: 1 },
+        totalAmount: { $sum: "$amount" },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        city: "$_id",
+        usersCount: 1,
+        totalAmount: 1,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+      },
+    },
+  ]);
+  if (!userData) {
+    res.status(400).json({ msg: "User not matched" });
+  }
+  res.status(200).json({ msg: "User fetched", data: userData });
+});
+
+// use of multer
+app.post("/users/upload", (req, res) => {
+  //upload.single("avatar")(req, res, (error) => {
+  upload.array("avatars")(req, res, (error) => {
+    if (error) {
+      console.error("Error catching in file uploading ", error.message);
+      return res.status(400).json({
+        success: false,
+        message: "File upload failed",
+        error: error.message,
+      });
+    }
+
+    if (!req.files) {
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded",
+      });
+    }
+
+    console.log("File details ", req.files);
+
+    return res.status(200).json({
+      success: true,
+      message: "File uploaded successfully",
+      data: req.files.map((file) => file.filename),
+      //data: req.file.filename,
+    });
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running at port ${PORT}`);
+});
+
+// {
+//     $facet: {
+//       totalUsers: [
+//         { $group: { _id: null, total: { $sum: "$usersCount" } } },
+//         { $project: { _id: 0, total: 1 } },
+//       ],
+//     },
+//   },
