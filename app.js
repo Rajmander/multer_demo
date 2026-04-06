@@ -445,14 +445,15 @@ app.get("/api/v1/finddemo", async (req, res, next) => {
 
     console.log("Skip ===== ", skip, "Limit = ", limit);
 
-    const users = await User.find().skip(skip).limit(limit).lean();
-
-    console.log("users ", typeof users[0].save);
+    const users = await User.find({ isActive: true, salary: { $gt: 20000 } })
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
     if (!users.length) {
       return res.status(200).json({
         success: true,
-        message: "No record found",
+        message: "No users found",
         data: [],
       });
     }
@@ -471,7 +472,7 @@ app.get("/api/v1/finddemo", async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      message: "Users listing",
+      message: "Users retrieved successfully",
       data: formattedUsers,
       metaData: {
         page: page,
@@ -483,6 +484,52 @@ app.get("/api/v1/finddemo", async (req, res, next) => {
     });
   } catch (error) {
     console.error("GET_USERS_ERROR", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+// Update User
+app.patch("/api/v1/demo/users/:id", async (req, res, next) => {
+  try {
+    const { salary } = req.body;
+    const { id } = req.params;
+
+    const user = await User.findById(id);
+
+    const updatedUser = await User.findByIdAndUpdate(
+      id,
+      { $set: { salary: salary } },
+      { new: true },
+    ).lean();
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const formattedUser = {
+      id: updatedUser._id,
+      name: updatedUser.username,
+      salary: updatedUser.salary,
+      city: updatedUser.city,
+      department: updatedUser.department,
+      isActive: updatedUser.isActive,
+      mobile: updatedUser.mobile,
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: "User updated successfully",
+      data: formattedUser,
+    });
+  } catch (error) {
+    console.error("UPDATE_USER_ERROR", error);
 
     return res.status(500).json({
       success: false,
