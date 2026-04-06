@@ -8,13 +8,13 @@ import { v4 as uuidv4 } from "uuid";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 
-import { dev } from "./otp.js";
+//import { dev } from "./otp.js";
 
 import PDFDocument from "pdfkit";
 
 import fs from "fs";
 
-dev();
+//dev();
 
 import { generatePdfBuffer } from "./gen.js";
 
@@ -59,7 +59,8 @@ import { dbConfig } from "./dbConfig.js";
 dbConfig();
 
 //import user from "./models/user_model.js";
-import user from "./models/user_model.js";
+import User from "./models/user_model.js";
+import mongoose from "mongoose";
 
 //test();
 
@@ -122,9 +123,9 @@ app.get("/users", async (req, res, next) => {
 // CREATE USER
 app.post("/users", async (req, res) => {
   try {
-    const { name, salary, city } = req.body;
+    const { name, salary, city, mobile, department } = req.body;
 
-    const hasUser = await user.find({ username: name });
+    const hasUser = await User.find({ username: name });
     if (hasUser.length > 0) {
       return res.status(209).json({ msg: "Username already exists" });
     }
@@ -133,6 +134,8 @@ app.post("/users", async (req, res) => {
     userC.username = name;
     userC.salary = salary;
     userC.city = city;
+    userC.mobile = mobile;
+    userC.department = department;
     const userData = await userC.save();
 
     return res.status(200).json({
@@ -147,16 +150,56 @@ app.post("/users", async (req, res) => {
 
 // PARTIAL UPDATE
 app.patch("/users/:id", async (req, res, next) => {
-  const { name } = req.body;
-  const id = req.params.id;
+  try {
+    let { name } = req.body;
+    let id = req.params.id;
 
-  const userData = await user.findByIdAndUpdate(
-    id,
-    { username: name },
-    { new: true },
-  );
+    name = name ?? "";
 
-  res.status(200).json({ msg: "patch", data: userData });
+    if (name == "") {
+      return res
+        .status(400)
+        .json({ message: "Name is required", error: "Validation error" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) throw new Error("Invalid Id");
+
+    if (!id) {
+      return res
+        .status(400)
+        .json({ message: "Id is required", error: "Validation error" });
+    }
+
+    const userData = await user.findByIdAndUpdate(
+      id,
+      { $set: { username: name, city: "Faridabad" } },
+      { new: true },
+    );
+
+    if (!userData) {
+      return res.status(404).json({
+        message: "User not found",
+        error: "NotFoundError",
+      });
+    }
+
+    const data = {
+      active: userData.isAtive,
+      name: userData.username,
+      city: userData.city,
+      salary: userData.salary,
+    };
+
+    res.status(200).json({
+      message: "User updated successfully",
+      data: data,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Something went wrong while updating the user",
+      error: error.message || "InternalServerError",
+    });
+  }
 });
 
 // User BY Id
@@ -172,14 +215,23 @@ app.get("/users/:id", async (req, res, next) => {
     .json({ msg: "User fetched successfully", data: userData });
 });
 
+//$upsert
 // Delete
 app.delete("/users/:id", async (req, res, next) => {
-  const userId = req.params.id;
-  const userDeleted = await user.findByIdAndDelete(userId);
-  if (!userDeleted) {
-    res.status(200).json({ msg: "Error while user deletion" });
+  try {
+    const userId = req.params.id;
+    const userDeleted = await user.findByIdAndDelete(userId);
+
+    if (!userDeleted) {
+      return res.status(200).json({ msg: "Error while user deletion" });
+    }
+    return res.status(200).json({ msg: "User deleted successfully" });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
-  res.status(200).json({ msg: "deleted" });
 });
 
 // Delete all users
@@ -339,15 +391,106 @@ app.post("/sendEmail", async (req, res, next) => {
   console.log("Email sent: " + info.response);
 });
 
+//===== find demo =====
+app.get("/find", async (req, res) => {
+  const users = await user.find(
+    {
+      //salary: { $not: { $gt: 7000 }, $exists: true },
+    },
+    { username: 1, _id: 0, salary: 1, city: 1 },
+    { skip: 0, limit: 100 },
+  );
+
+  //{ salary: { $gt: 50000 } },
+
+  const data = users.map((u) => ({
+    id: u._id,
+    name: u.username,
+    city: u.city,
+    salary: u.salary,
+  }));
+
+  return res
+    .status(200)
+    .json({ success: true, message: "User fetched successfully", data: data });
+});
+
+// rename field name
+app.post("/rename", async (req, res) => {
+  const test = await user.find({ isActive: true });
+  return res.status(200).json({ success: true, test });
+  //console.log(test);
+  // const result = await user.updateMany(
+  //   {},
+  //   { $rename: { isAtive: "isActive" } },
+  // );
+
+  // console.log(result);
+
+  // return res.status(200).json({ success: true, result });
+});
+
+app.get("/api/v1/finddemo", async (req, res, next) => {
+  try {
+    let pageQuery = req.query.page;
+    let limitQuery = req.query.limit;
+
+    let page = parseInt(pageQuery, 10);
+    let limit = parseInt(limitQuery, 10);
+
+    page = isNaN(page) || page < 1 ? 1 : page;
+    limit = isNaN(limit) || limit < 1 ? 10 : limit;
+
+    let skip = (page - 1) * limit;
+
+    console.log("Skip ===== ", skip, "Limit = ", limit);
+
+    const users = await User.find().skip(skip).limit(limit).lean();
+
+    console.log("users ", typeof users[0].save);
+
+    if (!users.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No record found",
+        data: [],
+      });
+    }
+
+    const formattedUsers = users.map((userItem) => ({
+      id: userItem._id.toString(),
+      name: userItem.username,
+      mobile: userItem.mobile,
+      salary: userItem.salary,
+      city: userItem.city,
+      department: userItem.department,
+      isActive: userItem.isActive,
+    }));
+
+    const totalUsers = await User.countDocuments();
+
+    return res.status(200).json({
+      success: true,
+      message: "Users listing",
+      data: formattedUsers,
+      metaData: {
+        page: page,
+        limit: limit,
+        count: formattedUsers.length,
+        total: totalUsers,
+        totalPages: Math.ceil(totalUsers / limit),
+      },
+    });
+  } catch (error) {
+    console.error("GET_USERS_ERROR", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server is running at port ${PORT}`);
 });
-
-// {
-//     $facet: {
-//       totalUsers: [
-//         { $group: { _id: null, total: { $sum: "$usersCount" } } },
-//         { $project: { _id: 0, total: 1 } },
-//       ],
-//     },
-//   },
