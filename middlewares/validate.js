@@ -19,3 +19,21 @@ export const validate = (req, res, next) => {
 
   next();
 };
+
+// find()
+
+// findOne()
+// findOneAndUpdate()
+// findOneAndDelete()
+
+// findById()
+// findByIdAndUpdate()
+// findByIdAndDelete()
+
+// updateOne()
+// updateMany()
+
+// deleteOne()
+// deleteMany()
+
+//insertMany()

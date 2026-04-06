@@ -468,7 +468,10 @@ app.get("/api/v1/finddemo", async (req, res, next) => {
       isActive: userItem.isActive,
     }));
 
-    const totalUsers = await User.countDocuments();
+    const totalUsers = await User.countDocuments({
+      isActive: true,
+      salary: { $gt: 20000 },
+    });
 
     return res.status(200).json({
       success: true,
