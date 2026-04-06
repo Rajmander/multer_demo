@@ -492,51 +492,59 @@ app.get("/api/v1/finddemo", async (req, res, next) => {
   }
 });
 
+import { updateUserValidator } from "./validators/user.validator.js";
+import { validate } from "./middlewares/validate.js";
+
 // Update User
-app.patch("/api/v1/demo/users/:id", async (req, res, next) => {
-  try {
-    const { salary } = req.body;
-    const { id } = req.params;
+app.patch(
+  "/api/v1/demo/users/:id",
+  updateUserValidator,
+  validate,
+  async (req, res, next) => {
+    try {
+      const { salary } = req.body;
+      const { id } = req.params;
 
-    const user = await User.findById(id);
+      const user = await User.findById(id);
 
-    const updatedUser = await User.findByIdAndUpdate(
-      id,
-      { $set: { salary: salary } },
-      { new: true },
-    ).lean();
+      const updatedUser = await User.findByIdAndUpdate(
+        id,
+        { $set: { salary: salary } },
+        { new: true },
+      ).lean();
 
-    if (!updatedUser) {
-      return res.status(404).json({
+      if (!updatedUser) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      const formattedUser = {
+        id: updatedUser._id,
+        name: updatedUser.username,
+        salary: updatedUser.salary,
+        city: updatedUser.city,
+        department: updatedUser.department,
+        isActive: updatedUser.isActive,
+        mobile: updatedUser.mobile,
+      };
+
+      return res.status(200).json({
+        success: true,
+        message: "User updated successfully",
+        data: formattedUser,
+      });
+    } catch (error) {
+      console.error("UPDATE_USER_ERROR", error);
+
+      return res.status(500).json({
         success: false,
-        message: "User not found",
+        message: "Internal server error",
       });
     }
-
-    const formattedUser = {
-      id: updatedUser._id,
-      name: updatedUser.username,
-      salary: updatedUser.salary,
-      city: updatedUser.city,
-      department: updatedUser.department,
-      isActive: updatedUser.isActive,
-      mobile: updatedUser.mobile,
-    };
-
-    return res.status(200).json({
-      success: true,
-      message: "User updated successfully",
-      data: formattedUser,
-    });
-  } catch (error) {
-    console.error("UPDATE_USER_ERROR", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
-  }
-});
+  },
+);
 
 app.listen(PORT, () => {
   console.log(`Server is running at port ${PORT}`);
